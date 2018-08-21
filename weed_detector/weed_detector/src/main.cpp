@@ -15,14 +15,30 @@ using namespace std;
 using namespace cv;
 
 
-//#define HSV_DEBUG
+//#define HSV_DEBUG  // creates HSV colorspace field
+//#define REC_ORIGINAL // recordes original capture from camera
+#define REC_PROCESSED // recordes processed capture
 //#define VIDEO_FILE_IN
 
+#if defined(REC_ORIGINAL) & defined(REC_PROCESSED)
+#error "only one stream can be recorded"
+#endif
 
-const char* camera_live = "LIVE";
+typedef struct recorder_param_s
+{
+	bool isColor;
+	VideoWriter writer;
+	int codec;  // select desired codec (must be available at runtime)
+	double fps; // framerate of the created video stream
+	char* filename; // name of the output video file with path
+}recorder_param_t, *recorder_param_p;
+
+const char* camera_live     = "LIVE";
 const char* solenoid_closed = "CLOSE SOLENOID";
 const char* solenoid_opened = "OPEN SOLENOID";
-bool gl_grass_decected = false;
+const char* rec_orig_path   = "C:/custom/record_orig.avi";
+const char* rec_proc_path   = "C:/custom/record_proc.avi";
+bool gl_grass_decected   = false;
 bool gl_grass_last_state = false;
 int counterFound = 0;
 
@@ -41,7 +57,7 @@ void printVideoOverlay_OPEN(Mat& dst_output)
 	imshow(camera_live, dst_output);
 }
 
-void videoProcessing(Mat& camera_input, Mat& original_img)
+Mat videoProcessing(Mat& camera_input, Mat& original_img)
 {
 
 	camera_input.copyTo(original_img);
@@ -120,11 +136,39 @@ void videoProcessing(Mat& camera_input, Mat& original_img)
 	{
 		printVideoOverlay_CLOSE(original_img);
 	}
+
+	return original_img;
 }
 
 void processMapir()
 {
 
+}
+
+recorder_param_t recp;
+void videoRecorder(Mat& source, const char* filename)
+{
+	static bool isRecorderInited = false;
+
+	if(isRecorderInited == false)
+	{ 
+	    recp.isColor = (source.type() == CV_8UC3);
+		recp.codec = CV_FOURCC('M', 'J', 'P', 'G');  
+		recp.fps = 15.0;//25.0;                          
+		//string filename = "D:/Projects/video_recognition/VideoRecog/live_stream_record.avi";             
+		recp.writer.open(filename, recp.codec, recp.fps, source.size(), recp.isColor);
+
+		if (!recp.writer.isOpened()) {
+			cerr << "Could not open the output video file for write\n";
+			system("pause"); //wait for any key press
+			return;
+		}
+
+		isRecorderInited = true;
+	}
+
+	cout << "Writing videofile: " << filename << endl;
+	recp.writer.write(source);
 }
 
 
@@ -177,8 +221,13 @@ int main(int argc, char* argv[])
 			system("pause"); //wait for any key press
 			return -1;
 		}
-
 		//imshow(camera_live, camera_input); // debug: original capture
+
+#ifdef REC_ORIGINAL
+		recp.filename = (char*)rec_orig_path;
+		videoRecorder(camera_input, (char*)recp.filename);
+#endif REC_ORIGINAL
+		
 #ifdef HSV_DEBUG
 		const char* HSV_window_name = "SelectionInHSV";
 		Mat cam_original;
@@ -187,7 +236,14 @@ int main(int argc, char* argv[])
 #endif HSV_DEBUG
 
 		e1 = getTickCount();
-		videoProcessing(camera_input, camera_input_orig);
+
+		 Mat processed = videoProcessing(camera_input, camera_input_orig);
+
+#ifdef REC_PROCESSED
+		recp.filename = (char*)rec_proc_path;
+		videoRecorder(processed, (char*)recp.filename);
+#endif REC_PROCESSED
+
 		e2 = getTickCount();
 		time = (e2 - e1) / getTickFrequency();
 
