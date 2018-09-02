@@ -18,12 +18,12 @@ using namespace cv;
 
 
 #define CAM_NUM   0
-//#define SERIAL_ENABLED // enable serial output
-#define HSV_DEBUG      // creates HSV colorspace field
+#define SERIAL_ENABLED // enable serial output
+//#define HSV_DEBUG      // creates HSV colorspace field
 //#define REC_ORIGINAL   // recordes original capture from camera
 //#define REC_PROCESSED  // recordes processed capture
 //#define VIDEO_FILE_IN  // processing recorded video (not implemented)
-#define SHOW_OVERLAY     // shows camera stream with overlays
+#//define SHOW_OVERLAY     // shows camera stream with overlays
 
 
 #if defined(REC_ORIGINAL) & defined(REC_PROCESSED)
@@ -56,13 +56,13 @@ const char* camera_live     = "LIVE";
 const char* solenoid_closed = "CLOSE SOLENOID";
 const char* solenoid_opened = "OPEN SOLENOID";
 
-const char serial_text_found[]     = "[OPEN]\n";
-const char serial_text_not_found[] = "[CLOSE]\n";
+const char serial_text_found[]     = "[OPEN]\r";
+const char serial_text_not_found[] = "[CLOSE]\r";
 
 const char* rec_orig_path   = "C:/custom/record_orig.avi";
 const char* rec_proc_path   = "C:/custom/record_proc.avi";
 //---------------------------------------------------------------
-const float gl_FPS = 10.0; // fps for recording
+const float gl_FPS = 10.0; // fps for recording (moved to ext config)
 //---------------------------------------------------------------
 bool gl_grass_decected   = false;
 bool gl_grass_last_state = false;
@@ -71,25 +71,27 @@ int counterFound = 0;
 
 void printVideoOverlay_CLOSE(Mat& dst_output)
 {
-#ifdef SHOW_OVERLAY
-	rectangle(dst_output, Point(0, 0), Point(640, 100), Scalar(0, 255, 0), FILLED, LINE_8);
-	putText(dst_output, solenoid_closed, Point(10, 50), 3, 2, Scalar(0, 0, 0));
-	imshow(camera_live, dst_output);
-#endif
+	if (isSettings_OVERLAY() == true) 
+	{
+		rectangle(dst_output, Point(0, 0), Point(640, 100), Scalar(0, 255, 0), FILLED, LINE_8);
+		putText(dst_output, solenoid_closed, Point(10, 50), 3, 2, Scalar(0, 0, 0));
+		imshow(camera_live, dst_output);
+	}
 }
 
 void printVideoOverlay_OPEN(Mat& dst_output)
 {
-#ifdef SHOW_OVERLAY
-	rectangle(dst_output, Point(0, 0), Point(640, 100), Scalar(0, 0, 255), FILLED, LINE_8);
-	putText(dst_output, solenoid_opened, Point(10, 50), 3, 2, Scalar(0, 0, 0));
-	imshow(camera_live, dst_output);
-#endif
+	if (isSettings_OVERLAY() == true)
+	{
+		rectangle(dst_output, Point(0, 0), Point(640, 100), Scalar(0, 0, 255), FILLED, LINE_8);
+		putText(dst_output, solenoid_opened, Point(10, 50), 3, 2, Scalar(0, 0, 0));
+		imshow(camera_live, dst_output);
+	}
 }
+
 
 Mat videoProcessing(Mat& camera_input, Mat& original_img)
 {
-	//----------------------
 	static int64 e1, e2; // testing clock counts for operations
 	static double time;
 	//----------------------
@@ -100,13 +102,22 @@ Mat videoProcessing(Mat& camera_input, Mat& original_img)
 	// H: 25 - 90
 	// S: 0  - 255
 	// V: 50 - 255
-
+	
 	cvtColor(camera_input, camera_input, COLOR_BGR2HSV); //Convert the captured frame // 0.011 - 0.022 sec
 
+	Scalar range_upper_set = Scalar (setSettings_Hu() , setSettings_Su() , setSettings_Vu() );
+	Scalar range_lower_set = Scalar (setSettings_Hl() , setSettings_Sl() , setSettings_Vl() );
+	//printf("upper: %d, %d, %d \n", setSettings_Hu(), setSettings_Su(), setSettings_Vu()); //debug
+	//printf("lower: %d, %d, %d \n", setSettings_Hl(), setSettings_Sl(), setSettings_Vl()); //debug
 	//inRange(camera_input, Scalar(25, 0, 50), Scalar(90, 255, 255), camera_input); // 0.011 - 0.021 sec // for 16Mpix camera
-	inRange(camera_input, Scalar(50, 85, 175), Scalar(160, 255, 255), camera_input); // 0.011 - 0.021 sec // for analog toradex camera
+	//inRange(camera_input, Scalar(50, 85, 175), Scalar(160, 255, 255), camera_input); // 0.011 - 0.021 sec // for analog toradex camera
+	inRange(camera_input, range_lower_set, range_upper_set, camera_input); // 0.011 - 0.021 sec
 
-	//imshow("camera_ranged", camera_input);  // debug: HSV colorspace image
+
+	if (isSettings_RANGED_DBG() == true)
+	{
+		imshow("camera_ranged", camera_input);  // debug: HSV colorspace image
+	}
 
 
 	//morphological operations
@@ -114,8 +125,10 @@ Mat videoProcessing(Mat& camera_input, Mat& original_img)
 	dilate(camera_input, camera_input, getStructuringElement(MORPH_RECT, Size(10, 10))); // 0.004 -0.0064 sec
 	dilate(camera_input, camera_input, getStructuringElement(MORPH_ELLIPSE, Size(10, 10)));
 
-	//imshow("camera_morph", camera_input);  // debug: morph image  // 0.002 sec
-
+	if (isSettings_MORPH_DBG() == true)
+	{
+		imshow("camera_morph", camera_input);  // debug: morph image  // 0.002 sec
+	}
 
 	vector < vector <Point>> contours;
 	findContours(camera_input, contours, RETR_LIST, CHAIN_APPROX_NONE, Point(0, 0));  // 0.003 - 0.010 sec
@@ -137,9 +150,11 @@ Mat videoProcessing(Mat& camera_input, Mat& original_img)
 		areas.push_back(contourArea(contours[i], false));
 		//printf("--------------contour #%d area:%f\n", i, areas[i]);
 		//if (areas[i] >= 40000) // for 16Mpix camera
-		if (areas[i] >= 10000) // for toradex analog camera
+		//if (areas[i] >= 10000) // for toradex analog camera
+		
+		if (areas[i] >= setSettings_AREA() )
 		{
-			if (counterFound > 3)
+			if (counterFound > setSettings_Averaging() )
 			{
 				gl_grass_decected = true;
 			}
@@ -148,7 +163,7 @@ Mat videoProcessing(Mat& camera_input, Mat& original_img)
 		}
 	}
 
-	if (counterFound > 3)
+	if (counterFound > setSettings_Averaging() )
 	{
 		if ((gl_grass_decected == true) && (gl_grass_last_state == false))
 		{
@@ -200,7 +215,7 @@ void videoRecorder(Mat& source, const char* filename)
 	{ 
 	    recp.isColor = (source.type() == CV_8UC3);
 		recp.codec = CV_FOURCC('M', 'J', 'P', 'G');  
-		recp.fps = gl_FPS;//25.0;                          
+		recp.fps = setSettings_FPS();//25.0;                          
 		//string filename = "D:/Projects/video_recognition/VideoRecog/live_stream_record.avi";             
 		recp.writer.open(filename, recp.codec, recp.fps, source.size(), recp.isColor);
 
@@ -258,6 +273,7 @@ int main(int argc, char* argv[])
 #endif SERIAL_ENABLED
 
 	Mat camera_input, camera_input_orig;
+	//Mat processed;
 	VideoCapture cap;
 
 	getConfiguration();
@@ -274,7 +290,7 @@ int main(int argc, char* argv[])
 
 	getCameraParams(cap);
 
-	setCameraParams(cap);
+	//setCameraParams(cap);
 
 	cout << "Start grabbing" << endl;
 
@@ -290,24 +306,27 @@ int main(int argc, char* argv[])
 		}
 		//imshow(camera_live, camera_input); // debug: original capture
 
-#ifdef REC_ORIGINAL
-		recp.filename = (char*)rec_orig_path;
-		videoRecorder(camera_input, (char*)recp.filename);
-#endif REC_ORIGINAL
+		if (setSettings_RECORDING() == E_REC_ORIG)
+		{
+			recp.filename = (char*)rec_orig_path;
+			videoRecorder(camera_input, (char*)recp.filename);
+		}
 		
-#ifdef HSV_DEBUG
-		const char* HSV_window_name = "SelectionInHSV";
-		Mat cam_original;
-		camera_input.copyTo(cam_original);
-		imshow(HSV_window_name, HSVSelection(cam_original, HSV_window_name));
-#endif HSV_DEBUG
+		if (isSettings_HSV_DEBUG() == true)
+		{
+			const char* HSV_window_name = "SelectionInHSV";
+			Mat cam_original;
+			camera_input.copyTo(cam_original);
+			imshow(HSV_window_name, HSVSelection(cam_original, HSV_window_name));
+		}
 
-		 Mat processed = videoProcessing(camera_input, camera_input_orig);
+		Mat processed = videoProcessing(camera_input, camera_input_orig);
 
-#ifdef REC_PROCESSED
-		recp.filename = (char*)rec_proc_path;
-		videoRecorder(processed, (char*)recp.filename);
-#endif REC_PROCESSED
+		if (setSettings_RECORDING() == E_REC_PROC)
+		{
+			recp.filename = (char*)rec_proc_path;
+			videoRecorder(processed, (char*)recp.filename);
+		}
 
 		//e2 = getTickCount();
 		//time = (e2 - e1) / getTickFrequency();

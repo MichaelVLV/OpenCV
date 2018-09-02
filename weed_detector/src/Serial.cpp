@@ -32,7 +32,7 @@ void SerialPortWrite(char *data, DWORD len)
 
 void SerialPortInit(void)
 {
-	LPCTSTR sPortName = L"\\\\.\\COM3";
+	LPCTSTR sPortName = L"\\\\.\\COM4";
 
 	hSerial = ::CreateFile(sPortName, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
