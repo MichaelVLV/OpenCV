@@ -248,6 +248,17 @@ void setCameraParams(VideoCapture& cap)
 	cap.set(CAP_PROP_FPS, 25);
 }
 
+void sendSerialStartNotification(void)
+{
+	for (uint8_t i = 0; i < 10; i++)
+	{
+		SerialPortWrite((char*)serial_text_found, sizeof(serial_text_found));
+		Sleep(200);
+		SerialPortWrite((char*)serial_text_not_found, sizeof(serial_text_not_found));
+		Sleep(200);
+	}
+}
+
 int main(int argc, char* argv[])
 {
 #ifdef VIDEO_FILE_IN
@@ -290,7 +301,11 @@ int main(int argc, char* argv[])
 
 	getCameraParams(cap);
 
-	//setCameraParams(cap);
+	setCameraParams(cap);
+
+#ifdef SERIAL_ENABLED
+	sendSerialStartNotification();
+#endif SERIAL_ENABLED
 
 	cout << "Start grabbing" << endl;
 
